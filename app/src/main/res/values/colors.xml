@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ...기존 컬러들... -->
+    <color name="launcher_background">#FFBB33</color>      <!-- 노란 계열 -->
+    <color name="launcher_foreground">#FFFFFF</color>      <!-- 전경(흰색) -->
+</resources>

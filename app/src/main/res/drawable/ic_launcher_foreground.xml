@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 흰색 배경 원 -->
+    <path
+        android:fillColor="@color/launcher_background"
+        android:pathData="M54,2
+                          A52,52 0 1,1 53.999,2" />
+
+    <!-- 전경 ‘A’ 글자 -->
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M34,80 L43,54 L65,54 L74,80 L66,80 L62,68 L46,68 L42,80 Z
+                          M53.5,46
+                          L49,60 L58,60 L53.5,46 Z" />
+</vector>
