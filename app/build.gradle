@@ -15,8 +15,20 @@ android {
         versionName "1.0"
     }
 
+    aaptOptions {
+        noCompress "tflite"
+    }
+
     buildFeatures {
         viewBinding true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            debuggable false       // 디버그 모드를 끔
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
     }
 
     compileOptions {

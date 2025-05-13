@@ -36,10 +36,10 @@ floor
 flute
 folder
 fork
-game
+cellphone
 glue
 goal
-guitar
+keyboard
 heater
 key
 knife
@@ -61,7 +61,7 @@ paper
 pen
 pencil
 phone
-piano
+mouse
 plug
 printer
 puck

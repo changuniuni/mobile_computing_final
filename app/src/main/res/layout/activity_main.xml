@@ -1,35 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
 
-    <fragment
-        android:id="@+id/arFragment"
-        android:name="com.example.arvocab.CustomArFragment"
+    <TextureView
+        android:id="@+id/cameraPreview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
     <View
         android:id="@+id/boundingBox"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_gravity="center"
         android:background="@drawable/bounding_box_background"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:visibility="gone" />  <!-- AR 기능이 없으므로 일단 숨김 -->
 
     <androidx.cardview.widget.CardView
         android:id="@+id/infoCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
         android:layout_margin="16dp"
-        app:cardBackgroundColor="#AA000000"
         app:cardCornerRadius="8dp"
         app:cardElevation="4dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -39,29 +37,26 @@
 
             <TextView
                 android:id="@+id/objectLabel"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#FFFFFF"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textSize="18sp"
+                android:textStyle="bold"
+                tools:text="[12:34:55] Object Name" />
 
             <TextView
                 android:id="@+id/translationView"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Scanning..."
-                android:textColor="#FFFFFF"
-                android:textSize="18sp" />
-
+                android:layout_marginTop="4dp"
+                android:textSize="16sp"
+                tools:text="번역된 이름" />
             <TextView
                 android:id="@+id/chatResponse"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:textColor="#AAFFFFFF"
-                android:textSize="16sp" />
+                android:layout_marginTop="8dp"
+                android:textSize="16sp"
+                tools:text="LLM 응답..." />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>
