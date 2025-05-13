@@ -76,4 +76,6 @@ dependencies {
 
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.6.4"
 
+    // CardView
+    implementation 'androidx.cardview:cardview:1.0.0'
 }
