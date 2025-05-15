@@ -16,6 +16,8 @@ import android.util.Size
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
+import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +33,8 @@ import java.util.Locale
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +44,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chatResponse: TextView
     // private lateinit var boundingBox: View // AR 기능 제거로 일단 사용 안 함
     private lateinit var chatContainer: CardView
+    
+    // 채팅 관련 UI 요소 추가
+    private lateinit var messageInput: EditText
+    private lateinit var sendButton: ImageButton
+    private lateinit var chatRecyclerView: RecyclerView
+    private lateinit var chatAdapter: ChatAdapter
+
+    // 새로고침 버튼 추가
+    private lateinit var refreshButton: ImageButton
 
     private lateinit var objectRecognizer: ObjectRecognizer
     private lateinit var translator: TranslationHelper
@@ -47,6 +60,9 @@ class MainActivity : AppCompatActivity() {
 
     private var currentLabel: String? = null
     private val isProcessing = AtomicBoolean(false)
+
+    // 인식 일시 중지 플래그 추가
+    private val isPaused = AtomicBoolean(false)
 
     private val minProcessIntervalMs = 1000L
     private var lastProcessAt = 0L
@@ -79,10 +95,50 @@ class MainActivity : AppCompatActivity() {
         chatResponse = findViewById(R.id.chatResponse)
         // boundingBox = findViewById(R.id.boundingBox) // AR 기능 제거
         chatContainer = findViewById(R.id.chatContainer)
+        
+        // 채팅 UI 요소 초기화
+        messageInput = findViewById(R.id.messageInput)
+        sendButton = findViewById(R.id.sendButton)
+        chatRecyclerView = findViewById(R.id.chatRecyclerView)
+        
+        // 새로고침 버튼 초기화
+        refreshButton = findViewById(R.id.refreshButton)
+        
+        // RecyclerView 및 어댑터 설정
+        chatAdapter = ChatAdapter()
+        chatRecyclerView.layoutManager = LinearLayoutManager(this)
+        chatRecyclerView.adapter = chatAdapter
 
         objectRecognizer = ObjectRecognizer(this)
-        translator = TranslationHelper(this, "en", "ko") // 필요에 따라 언어 코드 수정
+        translator = TranslationHelper(this, "en", "ko")
         llm = ConversationLLM(this)
+        
+        // 메시지 전송 버튼 클릭 리스너 설정
+        sendButton.setOnClickListener {
+            val message = messageInput.text.toString().trim()
+            if (message.isNotEmpty()) {
+                sendMessage(message)
+                messageInput.text.clear()
+            }
+        }
+        
+        // 새로고침 버튼 클릭 리스너 설정
+        refreshButton.setOnClickListener {
+            // 인식 일시 중지 해제
+            isPaused.set(false)
+            // 현재 라벨 초기화
+            currentLabel = null
+            // UI 초기화
+            objectLabel.text = ""
+            translationView.text = ""
+            chatResponse.text = ""
+            
+            // 채팅 어댑터에 시스템 메시지 추가
+            chatAdapter.addMessage("인식이 재개되었습니다. 새로운 물체를 인식해보세요.", false)
+            chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+            
+            Toast.makeText(this, "인식이 재개되었습니다", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -96,6 +152,12 @@ class MainActivity : AppCompatActivity() {
 
     private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
         val image = reader.acquireLatestImage() ?: return@OnImageAvailableListener
+
+        // 인식이 일시 중지된 상태이면 이미지만 닫고 처리하지 않음
+        if (isPaused.get()) {
+            image.close()
+            return@OnImageAvailableListener
+        }
 
         val now = SystemClock.uptimeMillis()
         if (now - lastProcessAt < minProcessIntervalMs || !isProcessing.compareAndSet(false, true)) {
@@ -114,31 +176,57 @@ class MainActivity : AppCompatActivity() {
 
                 if (recognizedLabel.isNotBlank() && recognizedLabel != currentLabel && score > 0.1) {
                     currentLabel = recognizedLabel
+                    
+                    // 물체가 인식되면 인식 일시 중지
+                    isPaused.set(true)
+                    
                     launch(Dispatchers.Main) {
                         val currentTime = timeFormat.format(Date())
-                        objectLabel.text = "[$currentTime] $recognizedLabel (${String.format("%.2f", score)})"
+                        
+                        // 기존 UI 업데이트 (필요시 숨김 처리 가능)
+                        objectLabel.text = "[$currentTime]It is $recognizedLabel."
                         translationView.text = ""
                         chatResponse.text = ""
                         chatContainer.visibility = if (recognizedLabel != "Unknown") View.VISIBLE else View.GONE
+                        
+                        // 새로고침 버튼 표시
+                        refreshButton.visibility = View.VISIBLE
 
-                        // 번역 및 LLM 호출 (기존 로직 유지 또는 수정)
-                        // translator.translate(recognizedLabel) { translated ->
-                        //    translationView.text = translated
-                        //    llm.getResponse(translated ?: recognizedLabel) { llmResponse ->
-                        //        chatResponse.text = llmResponse
-                        //    }
-                        // }
+                        // 번역 처리 및 채팅 메시지 추가
+                        if (recognizedLabel != "Unknown") {
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                try {
+                                    val translated = translator.translate(recognizedLabel)
+                                    
+                                    launch(Dispatchers.Main) {
+                                        // 기존 UI 업데이트
+                                        translationView.text = translated
+                                        
+                                        // 채팅 메시지로 추가
+                                        chatAdapter.addMessage("인식된 물체: $recognizedLabel", false)
+                                        chatAdapter.addMessage("한국어 번역: $translated", false)
+                                        
+                                        // 추가 정보 메시지
+                                        val infoMessage = "이 물체에 대해 더 알고 싶은 것이 있으면 질문해주세요."
+                                        chatAdapter.addMessage(infoMessage, false)
+                                        
+                                        // 스크롤 최신 메시지로 이동
+                                        chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Translation error: ${e.message}", e)
+                                }
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during recognition: ${e.message}", e)
             } finally {
                 isProcessing.set(false)
-                // image.close()는 이미 위에서 호출했으므로 여기서는 제거
             }
         }
     }
-
 
     private val cameraStateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
@@ -300,6 +388,47 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_LONG).show()
                 // finish() // 권한 없으면 앱 종료 또는 다른 처리
+            }
+        }
+    }
+
+    // 메시지 전송 및 LLM 응답 처리 함수
+    private fun sendMessage(message: String) {
+        // 사용자 메시지 추가
+        chatAdapter.addMessage(message, true)
+        
+        // 스크롤을 최신 메시지로 이동
+        chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+        
+        // 현재 인식된 객체가 있는 경우
+        val original = currentLabel ?: ""
+        
+        // 코루틴으로 번역 및 LLM 응답 처리
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                // 인식된 객체가 있으면 번역
+                val translated = if (original.isNotEmpty() && original != "Unknown") {
+                    translator.translate(original)
+                } else {
+                    ""
+                }
+                
+                // LLM에 메시지 전송하고 응답 받기
+                val response = llm.chat(original, translated, message)
+                
+                // UI 스레드에서 응답 표시
+                launch(Dispatchers.Main) {
+                    chatAdapter.addMessage(response, false)
+                    chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing message: ${e.message}", e)
+                
+                // 오류 발생 시 UI 스레드에서 오류 메시지 표시
+                launch(Dispatchers.Main) {
+                    chatAdapter.addMessage("Sorry, I couldn't process your message.", false)
+                    chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+                }
             }
         }
     }

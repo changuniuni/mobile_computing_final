@@ -54,16 +54,16 @@ class ChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     class UserMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val messageText: TextView = itemView.findViewById(R.id.messageText)
 
-        fun bind(chatMessage: ChatMessage) {
-            messageText.text = chatMessage.text
+        fun bind(message: ChatMessage) {
+            messageText.text = message.text
         }
     }
 
     class AppMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val messageText: TextView = itemView.findViewById(R.id.messageText)
 
-        fun bind(chatMessage: ChatMessage) {
-            messageText.text = chatMessage.text
+        fun bind(message: ChatMessage) {
+            messageText.text = message.text
         }
     }
 } 
