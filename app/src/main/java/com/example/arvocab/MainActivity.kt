@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var translationView: TextView
     private lateinit var chatResponse: TextView
     // private lateinit var boundingBox: View // AR 기능 제거로 일단 사용 안 함
-    private lateinit var infoCard: CardView
+    private lateinit var chatContainer: CardView
 
     private lateinit var objectRecognizer: ObjectRecognizer
     private lateinit var translator: TranslationHelper
@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         translationView = findViewById(R.id.translationView)
         chatResponse = findViewById(R.id.chatResponse)
         // boundingBox = findViewById(R.id.boundingBox) // AR 기능 제거
-        infoCard = findViewById(R.id.infoCard)
+        chatContainer = findViewById(R.id.chatContainer)
 
         objectRecognizer = ObjectRecognizer(this)
         translator = TranslationHelper(this, "en", "ko") // 필요에 따라 언어 코드 수정
@@ -119,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                         objectLabel.text = "[$currentTime] $recognizedLabel (${String.format("%.2f", score)})"
                         translationView.text = ""
                         chatResponse.text = ""
-                        infoCard.visibility = if (recognizedLabel != "Unknown") View.VISIBLE else View.GONE
+                        chatContainer.visibility = if (recognizedLabel != "Unknown") View.VISIBLE else View.GONE
 
                         // 번역 및 LLM 호출 (기존 로직 유지 또는 수정)
                         // translator.translate(recognizedLabel) { translated ->

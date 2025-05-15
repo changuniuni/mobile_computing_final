@@ -11,52 +11,98 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <View
-        android:id="@+id/boundingBox"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
+    <!-- 객체 위에 표시될 라벨 -->
+    <TextView
+        android:id="@+id/objectLabelOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@drawable/bounding_box_background"
-        android:visibility="gone" />  <!-- AR 기능이 없으므로 일단 숨김 -->
+        android:layout_marginBottom="150dp"
+        android:background="@drawable/label_background"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="24sp"
+        android:visibility="gone"
+        tools:text="pomme"
+        tools:visibility="visible" />
 
+    <!-- 하단 채팅 UI -->
     <androidx.cardview.widget.CardView
-        android:id="@+id/infoCard"
+        android:id="@+id/chatContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="4dp"
-        android:visibility="gone">
+        app:cardBackgroundColor="#F8F8F8"
+        app:cardElevation="0dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/objectLabel"
-                android:layout_width="wrap_content"
+            <!-- 채팅 메시지들 -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/chatRecyclerView"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                tools:text="[12:34:55] Object Name" />
+                android:paddingHorizontal="8dp"
+                android:paddingTop="8dp" />
 
-            <TextView
-                android:id="@+id/translationView"
-                android:layout_width="wrap_content"
+            <!-- 메시지 입력 영역 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="16sp"
-                tools:text="번역된 이름" />
-            <TextView
-                android:id="@+id/chatResponse"
-                android:layout_width="wrap_content"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <EditText
+                    android:id="@+id/messageInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/message_input_background"
+                    android:hint="Message"
+                    android:padding="12dp" />
+
+                <ImageButton
+                    android:id="@+id/sendButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Send message"
+                    android:src="@drawable/ic_mic" />
+            </LinearLayout>
+
+            <!-- infoCard 내부에 추가 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textSize="16sp"
-                tools:text="LLM 응답..." />
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/objectLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/translationView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/chatResponse"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:textSize="14sp" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 </FrameLayout>
