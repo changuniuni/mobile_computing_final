@@ -3,7 +3,11 @@
     package="com.example.arvocab">
 
     <!-- 카메라 권한 -->
-    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+
 
     <!-- ARCore용 카메라 하드웨어 요구 -->
     <uses-feature android:name="android.hardware.camera" android:required="true"/>
@@ -13,7 +17,9 @@
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.ARVocabApp">
+        android:theme="@style/Theme.ARVocabApp"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true">
 
     <!-- ★ 필수: AR Required(set to "required") 또는 AR Optional("optional") 지정 -->
     <meta-data

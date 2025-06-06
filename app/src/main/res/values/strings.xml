@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">AR Vocab</string>
+    
+    <!-- OpenAI API 키 설정 -->
+    <!-- 실제 사용 시 "sk-your-actual-openai-api-key-here"를 본인의 OpenAI API 키로 교체하세요 -->
+    <string name="openai_api_key">sk-your-actual-openai-api-key-here</string>
 </resources>

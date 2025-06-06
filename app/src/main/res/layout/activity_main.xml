@@ -6,12 +6,13 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <!-- 카메라 프리뷰용 TextureView -->
     <TextureView
         android:id="@+id/cameraPreview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 객체 위에 표시될 라벨 -->
+    <!-- 객체 위에 표시될 라벨 (초기에는 숨김) -->
     <TextView
         android:id="@+id/objectLabelOverlay"
         android:layout_width="wrap_content"
@@ -27,7 +28,7 @@
         tools:text="pomme"
         tools:visibility="visible" />
 
-    <!-- 새로고침 버튼 -->
+    <!-- 새로고침 버튼 (초기에는 숨김) -->
     <ImageButton
         android:id="@+id/refreshButton"
         android:layout_width="56dp"
@@ -39,7 +40,7 @@
         android:src="@drawable/ic_refresh"
         android:visibility="gone" />
 
-    <!-- 하단 채팅 UI -->
+    <!-- 하단에 위치할 채팅 컨테이너 -->
     <androidx.cardview.widget.CardView
         android:id="@+id/chatContainer"
         android:layout_width="match_parent"
@@ -56,7 +57,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 숨겨진 정보 영역 (필요시 사용) -->
+            <!-- 숨겨진 정보 영역 (필요 시 objectLabel, translationView, chatResponse 표시) -->
             <LinearLayout
                 android:id="@+id/infoArea"
                 android:layout_width="match_parent"
@@ -87,7 +88,7 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 채팅 메시지들 - 고정 높이로 설정 -->
+            <!-- 채팅 메시지 리스트 -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/chatRecyclerView"
                 android:layout_width="match_parent"
@@ -103,13 +104,14 @@
                 android:layout_height="1dp"
                 android:background="#E0E0E0" />
 
-            <!-- 메시지 입력 영역 -->
+            <!-- 메시지 입력 및 버튼 영역 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:padding="8dp">
 
+                <!-- 텍스트 입력창 -->
                 <EditText
                     android:id="@+id/messageInput"
                     android:layout_width="0dp"
@@ -121,6 +123,19 @@
                     android:maxLines="4"
                     android:inputType="textMultiLine" />
 
+                <!-- 음성 입력 버튼 -->
+                <ImageButton
+                    android:id="@+id/voiceButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="음성 입력 (비활성화됨)"
+                    android:src="@drawable/ic_mic"
+                    android:alpha="0.5"
+                    android:enabled="true" />
+
+                <!-- 전송 버튼 -->
                 <ImageButton
                     android:id="@+id/sendButton"
                     android:layout_width="48dp"
