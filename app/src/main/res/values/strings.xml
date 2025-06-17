@@ -1,7 +1,10 @@
 <resources>
-    <string name="app_name">AR Vocab</string>
+    <string name="app_name">VocabVision</string>
     
-    <!-- OpenAI API 키 설정 -->
-    <!-- 실제 사용 시 "sk-your-actual-openai-api-key-here"를 본인의 OpenAI API 키로 교체하세요 -->
-    <string name="openai_api_key">sk-your-actual-openai-api-key-here</string>
+    <!-- Gemini API 키는 local.properties 또는 BuildConfig를 통해 안전하게 관리됩니다. -->
+    <string name="refresh_recognition">Refresh recognition</string>
+    <string name="type_a_message">Type a message...</string>
+    <string name="voice_input">Voice input</string>
+    <string name="send_message">Send message</string>
+    <string name="text_to_speech">Text to speech</string>
 </resources>

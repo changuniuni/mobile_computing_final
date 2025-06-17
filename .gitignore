@@ -10,10 +10,14 @@
 # Java class files
 *.class
 
+# Kotlin compiled files
+*.kotlin_module
+
 # Generated files
 bin/
 gen/
 out/
+release/
 
 # Gradle files
 .gradle/
@@ -34,7 +38,7 @@ proguard/
 # Android Studio captures folder
 captures/
 
-# IntelliJ
+# IntelliJ IDEA
 *.iml
 .idea/workspace.xml
 .idea/tasks.xml
@@ -47,6 +51,16 @@ captures/
 .idea/navEditor.xml
 .idea/deploymentTargetSelector.xml
 .idea/deviceStreaming.xml
+.idea/runConfigurations.xml
+.idea/compiler.xml
+.idea/misc.xml
+.idea/vcs.xml
+.idea/migrations.xml
+.idea/AndroidProjectSystem.xml
+
+# VS Code
+.vscode/
+*.code-workspace
 
 # External native build folder
 .externalNativeBuild
@@ -70,10 +84,46 @@ lint/tmp/
 
 # MacOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Windows
 Thumbs.db
 ehthumbs.db
+Desktop.ini
 
-# ML model files (large binary files)
+# Linux
+*~
+
+# Large ML model files (TensorFlow Lite models)
+*.tflite
 app/src/main/assets/*.tflite
+app/src/main/assets/CLIPImageEncoder.tflite
+app/src/main/assets/CLIPTextEncoder.tflite
+app/src/main/assets/conformer_librispeech.tflite
+
+# ML related files that might be large
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+
+# AR and camera related temporary files
+captures/
+*.mp4
+*.mov
+
+# API keys and secrets (if any local config files)
+secrets.properties
+api_keys.properties
+local_config.properties
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# Crash reports
+crashlytics/
+crashes/

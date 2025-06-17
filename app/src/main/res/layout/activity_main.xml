@@ -6,29 +6,49 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- 카메라 프리뷰용 TextureView -->
+    <!-- Camera Preview -->
     <TextureView
         android:id="@+id/cameraPreview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 객체 위에 표시될 라벨 (초기에는 숨김) -->
+    <!-- AR Label Overlay (initially hidden) -->
     <TextView
         android:id="@+id/objectLabelOverlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginBottom="150dp"
+        android:layout_marginBottom="200dp"
         android:background="@drawable/label_background"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="10dp"
+        android:elevation="8dp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="12dp"
         android:textColor="@android:color/white"
-        android:textSize="24sp"
+        android:textSize="28sp"
         android:visibility="gone"
-        tools:text="pomme"
+        tools:text="Object"
         tools:visibility="visible" />
 
-    <!-- 새로고침 버튼 (초기에는 숨김) -->
+    <!-- LLM Status TextView (initially hidden) -->
+    <TextView
+        android:id="@+id/llmStatusTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="@drawable/label_background"
+        android:elevation="4dp"
+        android:fontFamily="sans-serif"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        tools:text="✅ Gemini API Ready"
+        tools:visibility="visible" />
+
+    <!-- Refresh Button (initially hidden) -->
     <ImageButton
         android:id="@+id/refreshButton"
         android:layout_width="56dp"
@@ -36,19 +56,20 @@
         android:layout_gravity="top|end"
         android:layout_margin="16dp"
         android:background="@drawable/refresh_button_background"
-        android:contentDescription="Refresh recognition"
+        android:contentDescription="@string/refresh_recognition"
         android:src="@drawable/ic_refresh"
-        android:visibility="gone" />
+        android:visibility="gone"
+        tools:visibility="visible"/>
 
-    <!-- 하단에 위치할 채팅 컨테이너 -->
+    <!-- Bottom Chat Container -->
     <androidx.cardview.widget.CardView
         android:id="@+id/chatContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        app:cardBackgroundColor="#F8F8F8"
-        app:cardElevation="4dp"
-        app:cardCornerRadius="16dp"
+        app:cardBackgroundColor="#FFFFFF"
+        app:cardElevation="8dp"
+        app:cardCornerRadius="20dp"
         android:layout_marginHorizontal="8dp"
         android:layout_marginBottom="8dp">
 
@@ -57,93 +78,76 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 숨겨진 정보 영역 (필요 시 objectLabel, translationView, chatResponse 표시) -->
-            <LinearLayout
-                android:id="@+id/infoArea"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/objectLabel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/translationView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/chatResponse"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="8dp"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <!-- 채팅 메시지 리스트 -->
+            <!-- Chat Message List -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/chatRecyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="250dp"
                 android:paddingHorizontal="8dp"
                 android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:clipToPadding="false" />
+                android:clipToPadding="false"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:listitem="@layout/item_chat_app"/>
 
-            <!-- 구분선 -->
+            <!-- Divider -->
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#E0E0E0" />
+                android:background="#E0E0E0"
+                android:layout_marginTop="8dp"/>
 
-            <!-- 메시지 입력 및 버튼 영역 -->
+            <!-- Message Input Area -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="8dp">
+                android:padding="12dp">
 
-                <!-- 텍스트 입력창 -->
+                <!-- Text Input -->
                 <EditText
                     android:id="@+id/messageInput"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:background="@drawable/message_input_background"
-                    android:hint="메시지를 입력하세요"
-                    android:padding="12dp"
+                    android:hint="@string/type_a_message"
+                    android:padding="14dp"
                     android:maxLines="4"
                     android:inputType="textMultiLine" />
 
-                <!-- 음성 입력 버튼 -->
+                <!-- Voice Input Button -->
                 <ImageButton
                     android:id="@+id/voiceButton"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="음성 입력 (비활성화됨)"
+                    android:contentDescription="@string/voice_input"
                     android:src="@drawable/ic_mic"
-                    android:alpha="0.5"
-                    android:enabled="true" />
+                    android:scaleType="centerInside" />
 
-                <!-- 전송 버튼 -->
+                <!-- TTS Button -->
+                <ImageButton
+                    android:id="@+id/ttsButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/text_to_speech"
+                    android:src="@drawable/ic_volume_up"
+                    android:scaleType="centerInside" />
+
+                <!-- Send Button -->
                 <ImageButton
                     android:id="@+id/sendButton"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Send message"
-                    android:src="@drawable/ic_send" />
+                    android:contentDescription="@string/send_message"
+                    android:src="@drawable/ic_send"
+                    android:scaleType="centerInside" />
             </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>

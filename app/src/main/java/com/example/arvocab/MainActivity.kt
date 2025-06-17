@@ -2,6 +2,7 @@ package com.example.arvocab
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
@@ -10,10 +11,13 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.ImageReader
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.speech.RecognizerIntent
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -23,6 +27,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
@@ -49,10 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class MainActivity : AppCompatActivity() {
 
     private lateinit var cameraPreview: TextureView
-    private lateinit var objectLabel: TextView
-    private lateinit var translationView: TextView
-    private lateinit var chatResponse: TextView
-    // private lateinit var boundingBox: View // AR 기능 제거로 일단 사용 안 함
+    private lateinit var objectLabelOverlay: TextView
     private lateinit var chatContainer: CardView
 
     // ─── Conformer TFLite ASR ─────────────────────────────────
@@ -68,8 +70,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var messageInput: EditText
     private lateinit var sendButton: ImageButton
     private lateinit var voiceButton: ImageButton
+    private lateinit var ttsButton: ImageButton
     private lateinit var chatRecyclerView: RecyclerView
     private lateinit var chatAdapter: ChatAdapter
+    private lateinit var llmStatusTextView: TextView
 
     // 새로고침 버튼
     private lateinit var refreshButton: ImageButton
@@ -99,6 +103,35 @@ class MainActivity : AppCompatActivity() {
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
     private val cameraOpenCloseLock = Semaphore(1)
+
+    // Speech Recognizer Launcher
+    private val speechRecognizerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            if (!spokenText.isNullOrEmpty()) {
+                val recognizedText = spokenText[0]
+                Log.d(TAG, "Speech recognition result: '$recognizedText'")
+                messageInput.setText(recognizedText)
+                sendMessage(recognizedText)
+                messageInput.text.clear()
+            }
+        } else {
+            Log.d(TAG, "Speech recognition failed or cancelled")
+        }
+    }
+    
+    // Permission Launcher for Audio
+    private val requestAudioPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+        if (isGranted) {
+            startSpeechToText()
+        } else {
+            Toast.makeText(this, "Microphone permission is required.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // TTS 관련
+    private var audioTrack: AudioTrack? = null
+    private var lastBotMessage: String = ""
 
     companion object {
         private const val TAG = "MainActivity"
@@ -144,17 +177,16 @@ class MainActivity : AppCompatActivity() {
 
         // ────────── 2) UI 바인딩 ──────────
         cameraPreview = findViewById(R.id.cameraPreview)
-        objectLabel = findViewById(R.id.objectLabel)
-        translationView = findViewById(R.id.translationView)
-        chatResponse = findViewById(R.id.chatResponse)
-        // boundingBox = findViewById(R.id.boundingBox) // AR 기능 제거
+        objectLabelOverlay = findViewById(R.id.objectLabelOverlay) // AR 라벨 오버레이
         chatContainer = findViewById(R.id.chatContainer)
 
         messageInput = findViewById(R.id.messageInput)
         sendButton = findViewById(R.id.sendButton)
         voiceButton = findViewById(R.id.voiceButton)
+        ttsButton = findViewById(R.id.ttsButton)
         chatRecyclerView = findViewById(R.id.chatRecyclerView)
         refreshButton = findViewById(R.id.refreshButton)
+        llmStatusTextView = findViewById(R.id.llmStatusTextView)
 
         chatAdapter = ChatAdapter()
         chatRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -176,23 +208,29 @@ class MainActivity : AppCompatActivity() {
         }
 
         // ────────── 4) voiceButton(마이크) 클릭 리스너 ──────────
-        // 예: 마이크 버튼 클릭 리스너 내부
         voiceButton.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.RECORD_AUDIO),
-                    RECORD_AUDIO_PERMISSION_REQUEST_CODE
-                )
-            } else {
-                toggleRecording()
+            when {
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED -> {
+                    startSpeechToText()
+                }
+                else -> {
+                    requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
             }
         }
 
+        // ────────── 5) ttsButton(음성 출력) 클릭 리스너 ──────────
+        ttsButton.setOnClickListener {
+            if (lastBotMessage.isNotEmpty()) {
+                playTextToSpeech(lastBotMessage)
+            } else {
+                Toast.makeText(this, "No message to play", Toast.LENGTH_SHORT).show()
+            }
+        }
 
-        // ────────── 5) 새로고침 버튼 클릭 리스너 ──────────
+        // ────────── 6) 새로고침 버튼 클릭 리스너 ──────────
         refreshButton.setOnClickListener {
             // 메모리 최적화를 위해 ObjectRecognizer 재초기화
             releaseObjectRecognizer()
@@ -200,20 +238,24 @@ class MainActivity : AppCompatActivity() {
             
             isPaused.set(false)
             currentLabel = null
-            objectLabel.text = ""
-            translationView.text = ""
-            chatResponse.text = ""
+            objectLabelOverlay.visibility = View.GONE // AR 라벨 숨김
+            refreshButton.visibility = View.GONE // 새로고침 버튼도 숨김
 
-            chatAdapter.addMessage("인식이 재개되었습니다. 새로운 물체를 인식해보세요.", false)
+            // 카메라 프리뷰 재시작
+            resumeCameraPreview()
+
+            chatAdapter.addMessage("OK, I'm ready for a new object! Point the camera at something.", false)
             chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
 
-            Toast.makeText(this, "인식이 재개되었습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Recognition Resumed", Toast.LENGTH_SHORT).show()
         }
     }
 
     private val surfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-            openCamera(width, height)
+            if (!isPaused.get()) {
+                openCamera(width, height)
+            }
         }
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
         override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean = true
@@ -257,12 +299,10 @@ class MainActivity : AppCompatActivity() {
                     loadLLMIfNeeded()
 
                     launch(Dispatchers.Main) {
-                        val currentTime = timeFormat.format(Date())
-
-                        objectLabel.text = "[$currentTime]It is $recognizedLabel."
-                        translationView.text = ""
-                        chatResponse.text = ""
-                        chatContainer.visibility = if (recognizedLabel != "Unknown") View.VISIBLE else View.GONE
+                        // 카메라 프리뷰 정지
+                        pauseCameraPreview()
+                        
+                        chatContainer.visibility = View.VISIBLE
                         refreshButton.visibility = View.VISIBLE
 
                         if (recognizedLabel != "Unknown") {
@@ -270,11 +310,12 @@ class MainActivity : AppCompatActivity() {
                                 try {
                                     val translated = translator.translate(recognizedLabel)
                                     launch(Dispatchers.Main) {
-                                        translationView.text = translated
-                                        chatAdapter.addMessage("인식된 물체: $recognizedLabel", false)
-                                        chatAdapter.addMessage("한국어 번역: $translated", false)
-                                        val infoMessage = "이 물체에 대해 더 알고 싶은 것이 있으면 질문해주세요."
-                                        chatAdapter.addMessage(infoMessage, false)
+                                        // AR 라벨 오버레이에 영어 원본 단어 표시
+                                        objectLabelOverlay.text = recognizedLabel
+                                        objectLabelOverlay.visibility = View.VISIBLE
+                                        
+                                        chatAdapter.addMessage("It looks like a $recognizedLabel! In Korean, that's '$translated'.", false)
+                                        chatAdapter.addMessage("What would you like to know about it?", false)
                                         chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
                                     }
                                 } catch (e: Exception) {
@@ -317,16 +358,20 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         startBackgroundThread()
-        if (cameraPreview.isAvailable) {
-            openCamera(cameraPreview.width, cameraPreview.height)
-        } else {
-            cameraPreview.surfaceTextureListener = surfaceTextureListener
+        if (!isPaused.get()) {
+            if (cameraPreview.isAvailable) {
+                openCamera(cameraPreview.width, cameraPreview.height)
+            } else {
+                cameraPreview.surfaceTextureListener = surfaceTextureListener
+            }
         }
     }
 
     override fun onPause() {
-        closeCamera()
-        stopBackgroundThread()
+        if (!isPaused.get()) {
+            closeCamera()
+            stopBackgroundThread()
+        }
         super.onPause()
     }
 
@@ -350,7 +395,15 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun requestCameraPermission() {
-        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST_CODE)
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
+            // 사용자에게 권한이 필요한 이유를 설명 (필요 시)
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.CAMERA),
+                CAMERA_PERMISSION_REQUEST_CODE
+            )
+        }
     }
 
     private fun openCamera(width: Int, height: Int) {
@@ -444,6 +497,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 카메라 프리뷰를 일시 정지합니다
+     */
+    private fun pauseCameraPreview() {
+        try {
+            captureSession?.stopRepeating()
+            Log.d(TAG, "Camera preview paused")
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Failed to pause camera preview", e)
+        }
+    }
+
+    /**
+     * 카메라 프리뷰를 재시작합니다
+     */
+    private fun resumeCameraPreview() {
+        try {
+            if (captureSession != null && cameraDevice != null) {
+                captureSession?.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler)
+                Log.d(TAG, "Camera preview resumed")
+            }
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Failed to resume camera preview", e)
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -452,17 +531,21 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == RECORD_AUDIO_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                toggleRecording()
+                startSpeechToText()
             } else {
-                Toast.makeText(this, "마이크 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Microphone permission is required to use voice input.", Toast.LENGTH_SHORT).show()
             }
         }
         // CAMERA 권한 처리도 마찬가지
         if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                openCamera(cameraPreview.width, cameraPreview.height)
+                if (cameraPreview.isAvailable) {
+                    openCamera(cameraPreview.width, cameraPreview.height)
+                } else {
+                    cameraPreview.surfaceTextureListener = surfaceTextureListener
+                }
             } else {
-                Toast.makeText(this, "카메라 권한이 필요합니다.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -527,7 +610,7 @@ class MainActivity : AppCompatActivity() {
             thread.start()
         } catch (e: SecurityException) {
             Log.e(TAG, "RECORD_AUDIO permission not granted", e)
-            Toast.makeText(this, "마이크 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microphone permission is required.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -607,15 +690,16 @@ class MainActivity : AppCompatActivity() {
                     if (recognizedText.isNotBlank()) {
                         messageInput.setText(recognizedText)
                         sendMessage(recognizedText)
+                        messageInput.text.clear()
                     } else {
-                        Toast.makeText(this@MainActivity, "음성 인식 결과가 없습니다.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Could not recognize speech.", Toast.LENGTH_SHORT).show()
                     }
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Conformer ASR 오류: ${e.message}", e)
+                Log.e(TAG, "Conformer ASR Error: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "음성 인식에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Failed to recognize speech.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -625,62 +709,90 @@ class MainActivity : AppCompatActivity() {
     // surfaceTextureListener, imageAvailableListener, openCamera(), createCameraPreviewSession(), closeCamera(), etc.
 
     // ─── 채팅 메시지 전송 및 LLM 응답 처리 ─────────────────────────────────────
-    private fun sendMessage(message: String) {
-        chatAdapter.addMessage(message, true)
+    private fun sendMessage(userMessage: String) {
+        // 아직 일시정지되지 않은 경우에만 카메라를 정지시킴
+        if (!isPaused.get()) {
+            isPaused.set(true)
+            pauseCameraPreview()
+        }
+        refreshButton.visibility = View.VISIBLE // 새로고침 버튼 표시
+
+        // 사용자 메시지를 채팅창에 추가
+        chatAdapter.addMessage(userMessage, true)
         chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
 
-        val original = currentLabel ?: ""
+        // LLM이 초기화되지 않았다면 초기화 후 채팅 시작
+        if (llm == null) {
+            initLlmAndChat(userMessage)
+            return
+        }
+
+        // LLM이 이미 초기화되었다면 바로 채팅 시작
+        lifecycleScope.launch {
+            val response = llm?.chat(currentLabel ?: "Unknown", "", userMessage) ?: "Error: LLM not available."
+            lastBotMessage = response // TTS를 위해 마지막 봇 메시지 저장
+            chatAdapter.addMessage(response, false)
+            chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+            
+            // 번역 요청인지 확인하고 화면 중앙에 번역된 단어 표시
+            checkAndDisplayTranslation(userMessage, response)
+        }
+    }
+
+    /**
+     * 사용자가 처음 채팅을 시도할 때 LLM을 초기화하고 첫 메시지를 전송
+     */
+    private fun initLlmAndChat(initialMessage: String) {
+        if (isLLMLoading.get()) {
+            Toast.makeText(this, "Assistant is still starting up...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isLLMLoading.set(true)
+        llmStatusTextView.text = "⏳ Starting assistant..."
+        llmStatusTextView.visibility = View.VISIBLE
+
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val translated = if (original.isNotEmpty() && original != "Unknown") {
-                    translator.translate(original)
-                } else {
-                    ""
-                }
-                
-                // LLM이 로드될 때까지 대기
-                var attempts = 0
-                while (llm == null && attempts < 100) { // 최대 10초 대기
-                    kotlinx.coroutines.delay(100)
-                    attempts++
-                    
-                    // 진행 상황 업데이트
-                    if (attempts % 20 == 0) { // 2초마다
-                        withContext(Dispatchers.Main) {
-                            chatAdapter.addMessage("⏳ AI 모델 로딩 중... (${attempts/10}초 경과)", false)
-                            chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
-                        }
-                    }
-                }
-                
-                val response = if (llm != null) {
-                    // 실제 모델 사용 상태 확인
-                    val isUsingRealModel = llm!!.isReady()
-                    Log.i(TAG, "Using real T5 model: $isUsingRealModel")
-                    
-                    llm!!.chat(original, translated, message)
-                } else {
-                    "죄송합니다. T5 AI 모델이 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요."
-                }
-                
-                withContext(Dispatchers.Main) {
+            llm = ConversationLLM(this@MainActivity)
+            
+            // UI 업데이트는 Main 스레드에서
+            withContext(Dispatchers.Main) {
+                isLLMLoading.set(false)
+                Toast.makeText(this@MainActivity, "Assistant is ready!", Toast.LENGTH_SHORT).show()
+                // 상태 업데이트 핸들러 시작
+                handler.post(updateLlmStatusRunnable)
+
+                // 첫 메시지 전송
+                lifecycleScope.launch {
+                    val response = llm?.chat(currentLabel ?: "Unknown", "", initialMessage) ?: "Error: LLM not available."
+                    lastBotMessage = response // TTS를 위해 마지막 봇 메시지 저장
                     chatAdapter.addMessage(response, false)
                     chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
                     
-                    // 실제 모델 사용 여부 표시
-                    val modelStatus = llm?.let { 
-                        if (it.isReady()) "🟢 실제 T5 모델 사용" else "🟡 스마트 폴백 모드"
-                    } ?: "🔴 모델 미로드"
-                    
-                    Log.i(TAG, "Model status: $modelStatus")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "sendMessage 에러: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    chatAdapter.addMessage("Sorry, I couldn't process your message: ${e.message}", false)
-                    chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
+                    // 번역 요청인지 확인하고 화면 중앙에 번역된 단어 표시
+                    checkAndDisplayTranslation(initialMessage, response)
                 }
             }
+        }
+    }
+
+    private val handler = Handler()
+    private val updateLlmStatusRunnable = object : Runnable {
+        override fun run() {
+            updateLlmStatus()
+            handler.postDelayed(this, 3000) // 3초마다 상태 업데이트
+        }
+    }
+
+    /**
+     * LLM의 현재 상태를 UI에 표시
+     */
+    private fun updateLlmStatus() {
+        if (llm != null) {
+            llmStatusTextView.text = llm?.getStatus()
+            llmStatusTextView.visibility = View.VISIBLE
+        } else {
+            llmStatusTextView.visibility = View.GONE
         }
     }
 
@@ -691,44 +803,24 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "ObjectRecognizer released for memory optimization")
     }
 
-    // ConversationLLM 지연 로딩
+    // ConversationLLM 지연 로딩 (조용히)
     private fun loadLLMIfNeeded() {
         if (llm == null && !isLLMLoading.get()) {
             isLLMLoading.set(true)
-            
-            // 로딩 시작 알림
-            lifecycleScope.launch(Dispatchers.Main) {
-                chatAdapter.addMessage("🤖 Loagind model...", false)
-                chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
-            }
             
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     Log.i(TAG, "Loading ConversationLLM after object recognition...")
                     llm = ConversationLLM(this@MainActivity)
                     
-                    // 로딩 완료 후 상태 확인
+                    // 로딩 완료 후 상태 확인 (로그만)
                     kotlinx.coroutines.delay(1000) // 초기화 시간 여유
                     
-                    withContext(Dispatchers.Main) {
-                        val status = llm?.getDetailedStatus() ?: "❌ 로딩 실패"
-                        val isRealModel = llm?.isReady() ?: false
-                        
-                        if (isRealModel) {
-                            chatAdapter.addMessage("✅ Model is successfully loaded!", false)
-                        } else {
-                            chatAdapter.addMessage("⚠️ T5 모델 로딩에 실패했지만, 스마트 폴백 모드로 작동합니다.\n$status", false)
-                        }
-                        chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
-                    }
+                    val status = llm?.getStatus() ?: "Load failed"
+                    Log.i(TAG, "ConversationLLM loaded. Status: $status")
                     
-                    Log.i(TAG, "ConversationLLM loaded successfully")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to load ConversationLLM: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        chatAdapter.addMessage("❌ T5 모델 로딩에 실패했습니다: ${e.message}", false)
-                        chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
-                    }
                 } finally {
                     isLLMLoading.set(false)
                 }
@@ -742,5 +834,197 @@ class MainActivity : AppCompatActivity() {
         releaseObjectRecognizer()
         llm = null
         asrInterpreter?.close()
+        audioTrack?.release()
+        audioTrack = null
+    }
+
+    private fun startSpeechToText() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+        }
+        try {
+            speechRecognizerLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Speech recognition is not available.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkAndDisplayTranslation(userMessage: String, geminiResponse: String) {
+        Log.d(TAG, "Checking translation - User: '$userMessage', Response: '$geminiResponse'")
+        
+        // 번역 요청 키워드 감지 (더 포괄적으로)
+        val translationKeywords = listOf(
+            // 영어 패턴
+            "in chinese", "in japanese", "in spanish", "in french", "in german", 
+            "in italian", "in russian", "in arabic", "in hindi", "in portuguese",
+            "chinese", "japanese", "spanish", "french", "german", "italian", "russian",
+            "translate", "translation", "how do you say", "what is", "say in",
+            "how to say", "what's", "whats", "how do i say",
+            
+            // 한국어 패턴
+            "중국어로", "일본어로", "스페인어로", "프랑스어로", "독일어로", "이탈리아어로",
+            "중국어", "일본어", "스페인어", "프랑스어", "독일어", "이탈리아어",
+            "번역", "뭐야", "어떻게", "말해", "어떻게 말해", "뭐라고", "뭐라고 해",
+            "어떻게 해", "어떻게 말하지", "뭐라고 하지"
+        )
+        
+        val isTranslationRequest = translationKeywords.any { keyword ->
+            userMessage.lowercase().contains(keyword.lowercase())
+        }
+        
+        Log.d(TAG, "Is translation request: $isTranslationRequest")
+        
+        if (isTranslationRequest) {
+            // Gemini 응답에서 번역된 단어 추출 시도
+            val extractedWord = extractTranslatedWord(geminiResponse)
+            Log.d(TAG, "Extracted word: '$extractedWord'")
+            
+            if (extractedWord.isNotEmpty()) {
+                // 화면 중앙에 번역된 단어 표시 (그대로 유지)
+                Log.d(TAG, "Displaying translated word: '$extractedWord'")
+                objectLabelOverlay.text = extractedWord
+                objectLabelOverlay.visibility = View.VISIBLE
+            } else {
+                Log.d(TAG, "No word extracted, keeping original display")
+            }
+        }
+    }
+    
+    private fun extractTranslatedWord(response: String): String {
+        Log.d(TAG, "Extracting word from response: '$response'")
+        
+        // 다양한 패턴으로 번역된 단어 추출 시도
+        val patterns = listOf(
+            "\"([^\"]{1,20})\"",  // 따옴표로 둘러싸인 단어
+            "'([^']{1,20})'",     // 작은따옴표로 둘러싸인 단어
+            "is\\s+([\\p{L}\\p{M}\\p{N}]{1,20})(?:\\s|\\.|,|!|\\?|$)", // "is 단어" 패턴
+            "called\\s+([\\p{L}\\p{M}\\p{N}]{1,20})(?:\\s|\\.|,|!|\\?|$)", // "called 단어" 패턴
+            "([\\p{L}\\p{M}\\p{N}]{2,15})(?:\\s|\\.|,|!|\\?|$)", // 일반 단어 패턴
+            "：\\s*([\\p{L}\\p{M}\\p{N}]{1,20})", // 콜론 뒤 단어
+            ":\\s*([\\p{L}\\p{M}\\p{N}]{1,20})", // 영어 콜론 뒤 단어
+            "([\\p{L}\\p{M}\\p{N}]{1,20})\\s*\\(", // 괄호 앞 단어
+            "\\*\\*([\\p{L}\\p{M}\\p{N}]{1,20})\\*\\*" // 볼드체 단어
+        )
+        
+        for ((index, pattern) in patterns.withIndex()) {
+            Log.d(TAG, "Trying pattern $index: $pattern")
+            val regex = Regex(pattern)
+            val matches = regex.findAll(response)
+            for (match in matches) {
+                if (match.groupValues.size > 1) {
+                    val word = match.groupValues[1].trim()
+                    Log.d(TAG, "Found candidate word: '$word'")
+                    
+                    // 영어가 아닌 문자가 포함된 경우 반환
+                    if (word.length in 1..20 && 
+                        !word.matches(Regex("[a-zA-Z\\s]+")) && 
+                        !word.contains(" ") &&
+                        word != "Unknown") {
+                        Log.d(TAG, "Selected word: '$word'")
+                        return word
+                    }
+                }
+            }
+        }
+        
+        // 마지막 시도: 응답에서 첫 번째 비영어 단어 찾기
+        Log.d(TAG, "Trying fallback method")
+        val words = response.split(Regex("[\\s.,!?;:()\\[\\]\"'`*]+"))
+        for (word in words) {
+            val cleanWord = word.trim()
+            Log.d(TAG, "Checking fallback word: '$cleanWord'")
+            if (cleanWord.length in 1..20 && 
+                !cleanWord.matches(Regex("[a-zA-Z0-9]+")) &&
+                cleanWord.isNotBlank() &&
+                cleanWord != "Unknown") {
+                Log.d(TAG, "Selected fallback word: '$cleanWord'")
+                return cleanWord
+            }
+        }
+        
+        Log.d(TAG, "No word found")
+        return ""
+    }
+
+    // 테스트용 함수 - 번역 요청 감지 테스트
+    private fun testTranslationDetection(testMessage: String) {
+        Log.d(TAG, "=== Testing translation detection ===")
+        Log.d(TAG, "Test message: '$testMessage'")
+        
+        val translationKeywords = listOf(
+            "in chinese", "in japanese", "chinese", "japanese", "translate", 
+            "중국어로", "일본어로", "중국어", "일본어", "번역", "뭐야", "어떻게"
+        )
+        
+        val isTranslationRequest = translationKeywords.any { keyword ->
+            testMessage.lowercase().contains(keyword.lowercase())
+        }
+        
+        Log.d(TAG, "Is translation request: $isTranslationRequest")
+        Log.d(TAG, "=== End test ===")
+    }
+
+    private fun playTextToSpeech(text: String) {
+        if (llm == null) {
+            Toast.makeText(this, "Assistant not ready", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                Toast.makeText(this@MainActivity, "Generating speech...", Toast.LENGTH_SHORT).show()
+                
+                val audioData = llm?.generateSpeech(text)
+                if (audioData != null) {
+                    playAudio(audioData)
+                } else {
+                    Toast.makeText(this@MainActivity, "Failed to generate speech", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "TTS Error: ${e.message}", e)
+                Toast.makeText(this@MainActivity, "Speech generation error", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun playAudio(audioData: ByteArray) {
+        try {
+            // AudioTrack 설정 (24kHz, 16-bit, Mono)
+            val sampleRate = 24000
+            val channelConfig = AudioFormat.CHANNEL_OUT_MONO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+            val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+
+            audioTrack?.release() // 기존 AudioTrack 해제
+
+            audioTrack = AudioTrack(
+                AudioManager.STREAM_MUSIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize,
+                AudioTrack.MODE_STREAM
+            )
+
+            audioTrack?.play()
+            
+            // 백그라운드에서 오디오 재생
+            Thread {
+                try {
+                    audioTrack?.write(audioData, 0, audioData.size)
+                    audioTrack?.stop()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Audio playback error: ${e.message}", e)
+                }
+            }.start()
+
+            Toast.makeText(this, "Playing speech...", Toast.LENGTH_SHORT).show()
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Audio setup error: ${e.message}", e)
+            Toast.makeText(this, "Audio playback failed", Toast.LENGTH_SHORT).show()
+        }
     }
 }

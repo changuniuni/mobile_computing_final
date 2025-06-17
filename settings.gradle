@@ -1,2 +1,2 @@
-rootProject.name='ARVocabApp'
+rootProject.name='VocabVision'
 include ':app'

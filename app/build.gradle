@@ -1,6 +1,17 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+}
+
+// Read the API key from local.properties
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
 }
 
 android {
@@ -13,10 +24,14 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        // Make the API key available in BuildConfig
+        buildConfigField("String", "GEMINI_API_KEY", localProperties.getProperty("gemini.apiKey", "\"YOUR_API_KEY_IS_NOT_SET\""))
     }
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 
     buildTypes {
@@ -62,7 +77,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
     // Kotlin
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
 
     // AndroidX Fragment (명시적 추가)
     implementation 'androidx.fragment:fragment-ktx:1.6.2'
@@ -73,7 +88,7 @@ dependencies {
     // Sceneform maintained (AndroidX 호환 버전)
     implementation 'com.google.ar.sceneform:filament-android:1.17.1'
     implementation('com.google.ar.sceneform:core:1.17.1') {
-        exclude group: 'com.android.support'
+        exclude group: 'com.android.support'    
         exclude module: 'support-v4'
         exclude module: 'appcompat-v7'
     }
@@ -92,6 +107,7 @@ dependencies {
     // TensorFlow Lite (for object recognition only)
     implementation 'org.tensorflow:tensorflow-lite:2.14.0'
     implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+    implementation 'org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4'
 
     // Google ML Kit Translation API
     implementation 'com.google.mlkit:translate:17.0.3'
@@ -103,8 +119,15 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
 
+    // ONNX Runtime for text generation
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.18.0'
+
     // JSON processing
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Retrofit for Gemini API
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
 
     // CardView
     implementation 'androidx.cardview:cardview:1.0.0'
