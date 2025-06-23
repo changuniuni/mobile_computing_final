@@ -96,6 +96,7 @@ sequenceDiagram
         note over MainActivity, ObjectRecognizer: Phase 1: Object Recognition
         User->>MainActivity (UI): Launches App
         MainActivity (UI)->>ObjectRecognizer: Initializes & Starts Camera Feed
+        activate ObjectRecognizer
         loop Recognition Loop
             ObjectRecognizer->>ObjectRecognizer: Process Camera Frame & Infer
         end
